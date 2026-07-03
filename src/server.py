@@ -30,6 +30,10 @@ app.include_router(token_router)
 
 @app.middleware("http")
 async def oauth_middleware(request: Request, call_next):
+    # Bypass OPTIONS requests (CORS preflight checks do not contain credentials)
+    if request.method == "OPTIONS":
+        return await call_next(request)
+
     # Bypass verification for non-MCP routes, dynamic login/consent endpoints, and health checks
     if request.url.path in ["/", "/health", "/docs", "/openapi.json", "/register", "/authorize", "/token"]:
         return await call_next(request)
