@@ -1,5 +1,5 @@
-from fastapi import APIRouter, Form, HTTPException
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import APIRouter, Form, HTTPException, Request
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from clients.botiq_api_client import call_validate_user
 from auth_server.auth_code_store import store_auth_code
 from auth_server.register_endpoint import validate_client
@@ -123,6 +123,7 @@ async def show_login_form(
 
 @router.post("/authorize")
 async def handle_login(
+    request: Request,
     client_id: str = Form(...),
     redirect_uri: str = Form(...),
     code_challenge: str = Form(...),
@@ -137,6 +138,8 @@ async def handle_login(
     # Check brute-force lockout status
     from auth_server.rate_limiter import is_locked_out, record_failed_attempt, reset_failed_attempts
     if is_locked_out(user_id):
+        if "application/json" in request.headers.get("Accept", ""):
+            raise HTTPException(status_code=429, detail="Account locked out. Try again in 15 minutes.")
         return HTMLResponse(
             "<h3>This account is temporarily locked out due to too many failed login attempts. Please try again in 15 minutes.</h3>",
             status_code=429
@@ -148,6 +151,8 @@ async def handle_login(
     if result.get("status_code") != 200:
         remaining = record_failed_attempt(user_id)
         logger.warning(f"Login credentials validation failed for user_id={user_id}. Remaining attempts: {remaining}")
+        if "application/json" in request.headers.get("Accept", ""):
+            raise HTTPException(status_code=401, detail=f"Invalid credentials. Attempts remaining: {remaining}")
         return HTMLResponse(
             f"<h3>Invalid credentials. Attempts remaining: {remaining}. <a href='javascript:history.back()'>Try again</a></h3>",
             status_code=401
@@ -166,6 +171,15 @@ async def handle_login(
         code_challenge_method=code_challenge_method,
         ttl_seconds=200
     )
+
+    # Check if request expects a JSON response (like browser fetch from JS client)
+    if "application/json" in request.headers.get("Accept", ""):
+        logger.info(f"Login successful for user_id={user_id}. Returning JSON auth code response.")
+        return JSONResponse({
+            "status": "success",
+            "code": auth_code,
+            "redirect_uri": f"{redirect_uri}?code={auth_code}&state={state}"
+        })
 
     logger.info(f"Login successful for user_id={user_id}. Redirecting to {redirect_uri}")
     return RedirectResponse(

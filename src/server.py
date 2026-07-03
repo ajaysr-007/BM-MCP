@@ -8,10 +8,20 @@ from auth.token_middleware import validate_local_token
 from auth_server.register_endpoint import router as register_router
 from auth_server.authorize_endpoint import router as authorize_router
 from auth_server.token_endpoint import router as token_router
+from fastapi.middleware.cors import CORSMiddleware
 from utils.logger import logger
 from config import HOST, PORT
 
 app = FastAPI(title="BotIQ MCP Server Wrapper")
+
+# Enable CORS for frontend API calls
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Set to specific origins like ["http://localhost:5500"] in production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Include the self-hosted OAuth 2.1 authentication server endpoints
 app.include_router(register_router)

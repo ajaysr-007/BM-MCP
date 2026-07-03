@@ -9,14 +9,19 @@ async def validate_local_token(request: Request) -> dict:
     Supports a static token bypass if MCP_STATIC_TOKEN is configured in the environment.
     """
     auth_header = request.headers.get("Authorization", "")
-    if not auth_header.startswith("Bearer "):
+    token = None
+    if auth_header.startswith("Bearer "):
+        token = auth_header.split(" ", 1)[1]
+    else:
+        # Fallback to query parameter token (necessary for browser EventSource API)
+        token = request.query_params.get("token")
+
+    if not token:
         raise HTTPException(
             status_code=401,
-            detail="Missing bearer token",
+            detail="Missing token (pass via Bearer header or token query parameter)",
             headers={"WWW-Authenticate": 'Bearer realm="botiq-mcp"'},
         )
-
-    token = auth_header.split(" ", 1)[1]
 
     # Check for static bypass token
     if MCP_STATIC_TOKEN and token == MCP_STATIC_TOKEN:
